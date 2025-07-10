@@ -4,7 +4,7 @@
     "name": "Distributor Kick off meeting  18-Jun",
     "start_date": "2025-06-17",
     "end_date": "2025-06-20",
-    "category": "Work",
+    "category": "Meeting",
     "priority": "High",
     "description": "",
     "created_at": "2025-07-10 10:54:05"
@@ -14,7 +14,7 @@
     "name": "Product Registration",
     "start_date": "2025-06-18",
     "end_date": "2025-07-11",
-    "category": "Work",
+    "category": "Administrative Tasks",
     "priority": "High",
     "description": "E3AS-HF, ZP-L, VHV5, M1 drives registration",
     "created_at": "2025-07-10 10:55:27"
@@ -44,7 +44,7 @@
     "name": "VIC NPR Demo day",
     "start_date": "2025-07-25",
     "end_date": "2025-07-25",
-    "category": "Work",
+    "category": "Meeting",
     "priority": "High",
     "description": "2 Hours, key products, Sales team enablement",
     "created_at": "2025-07-10 11:08:46"
@@ -54,7 +54,7 @@
     "name": "E3AS-HF  Digital marketing #2:  Logistics, warehousing",
     "start_date": "2025-07-22",
     "end_date": "2025-07-22",
-    "category": "Work",
+    "category": "Digital Marketing",
     "priority": "High",
     "description": "Paid ad, Video, logistics, warehousing, palletising, \n",
     "created_at": "2025-07-10 11:10:05"
@@ -74,7 +74,7 @@
     "name": "VIC Target accounts",
     "start_date": "2025-07-28",
     "end_date": "2025-08-01",
-    "category": "Work",
+    "category": "Travel",
     "priority": "Medium",
     "description": "Sales teams to nominate 10 customer targets, SFDC follow ups.\n",
     "created_at": "2025-07-10 11:14:04"
@@ -84,7 +84,7 @@
     "name": "QLD NPR Demo day 4-aug",
     "start_date": "2025-08-06",
     "end_date": "2025-08-06",
-    "category": "Work",
+    "category": "Meeting",
     "priority": "Medium",
     "description": "2 Hours, key products, Sales team enablement",
     "created_at": "2025-07-10 11:16:10"
@@ -94,7 +94,7 @@
     "name": "QLD Target accounts",
     "start_date": "2025-08-06",
     "end_date": "2025-08-08",
-    "category": "Work",
+    "category": "Travel",
     "priority": "Medium",
     "description": "Sales teams to nominate 10 customer targets, SFDC follow ups.\n",
     "created_at": "2025-07-10 11:17:35"
@@ -104,7 +104,7 @@
     "name": "E3AS-HF  Digital marketing #3",
     "start_date": "2025-07-29",
     "end_date": "2025-07-29",
-    "category": "Work",
+    "category": "Digital Marketing",
     "priority": "Medium",
     "description": "Paid ad, Video, food, commodity, bev, packaging ",
     "created_at": "2025-07-10 11:19:28"
@@ -114,7 +114,7 @@
     "name": "ZP-L Digital marketing #2",
     "start_date": "2025-07-31",
     "end_date": "2025-07-31",
-    "category": "Work",
+    "category": "Digital Marketing",
     "priority": "Medium",
     "description": "Paid ad, Video",
     "created_at": "2025-07-10 11:20:47"
@@ -124,7 +124,7 @@
     "name": "E3AS-HF  Digital marketing #4",
     "start_date": "2025-08-04",
     "end_date": "2025-08-04",
-    "category": "Work",
+    "category": "Digital Marketing",
     "priority": "Medium",
     "description": "EDM to landing page. landing page to demo request form or purchase page.",
     "created_at": "2025-07-10 11:23:17"
