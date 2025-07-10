@@ -8,7 +8,7 @@ import json
 import os
 
 # Set page config
-st.set_page_config(page_title="Activity Timeline Manager", layout="wide")
+st.set_page_config(page_title="Amrit STP Timeline Manager", layout="wide")
 
 # File paths for persistent storage
 DATA_FILE = "activities_data.json"
@@ -95,7 +95,7 @@ def get_color_for_activity(category, categories_dict):
     return categories_dict.get(category, "#6C5CE7")  # Default purple if category not found
 
 # Main title
-st.title("🗓️ Activity Timeline Manager")
+st.title("🗓️ Amrit STP Timeline Manager")
 st.markdown("Add activities with date ranges and visualize them on an interactive timeline")
 
 # Display data persistence status
@@ -470,4 +470,4 @@ with col2:
 
 # Footer
 st.markdown("---")
-st.markdown("*Built with Streamlit and Plotly | Data automatically saves across sessions*")
+st.markdown("*Built by Amrit | Data automatically saves across sessions*")
