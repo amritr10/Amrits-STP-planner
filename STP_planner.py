@@ -4,120 +4,148 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import uuid
-import json
-import os
 import io
-import zipfile
 
-# Set page config
+# Google Sheets
+import gspread
+from google.oauth2.service_account import Credentials
+
 st.set_page_config(page_title="Amrit STP Timeline Manager", layout="wide")
 
-# File paths for persistent storage
-DATA_FILE = "activities_data.json"
-CONFIG_FILE = "categories_config.json"
+# ────────────── GOOGLE SHEETS AUTH & HELPERS ──────────────
 
-# Helper functions for category configuration
-def load_categories():
-    default_categories = {
-        "Work": "#FF6B6B",
-        "Personal": "#4ECDC4",
-        "Project": "#45B7D1",
-        "Meeting": "#FFA07A",
-        "Travel": "#98D8C8",
-        "Other": "#6C5CE7"
-    }
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, "r") as f:
-                return json.load(f)
-        except Exception as e:
-            st.error(f"Error loading categories config: {e}")
-            return default_categories
-    return default_categories
-
-def save_categories(categories):
+@st.cache_resource
+def init_gsheet():
+    """
+    Authenticate via service‐account JSON stored in st.secrets["gcp_service_account"],
+    open by spreadsheet_id in st.secrets["gspread"]["spreadsheet_id"]
+    """
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"], scopes=scopes
+    )
+    client = gspread.authorize(creds)
+    sh = client.open_by_key(st.secrets["gspread"]["spreadsheet_id"])
+    # Ensure the two worksheets exist:
     try:
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(categories, f, indent=2)
-        return True
-    except Exception as e:
-        st.error(f"Error saving categories config: {e}")
-        return False
+        acts_ws = sh.worksheet("Activities")
+    except gspread.WorksheetNotFound:
+        acts_ws = sh.add_worksheet("Activities", rows="1000", cols="20")
+        acts_ws.append_row(["id","name","start_date","end_date","category","priority","description","created_at"])
+    try:
+        cats_ws = sh.worksheet("Categories")
+    except gspread.WorksheetNotFound:
+        cats_ws = sh.add_worksheet("Categories", rows="100", cols="5")
+        cats_ws.append_row(["name","color"])
+        # add a default category
+        cats_ws.append_row(["Other","#6C5CE7"])
+    return sh
+
+sh = init_gsheet()
 
 def load_activities():
-    if os.path.exists(DATA_FILE):
+    ws = sh.worksheet("Activities")
+    records = ws.get_all_records()
+    out = []
+    for r in records:
+        # skip empty rows
+        if not r.get("id"):
+            continue
         try:
-            with open(DATA_FILE, "r") as f:
-                data = json.load(f)
-                for act in data:
-                    act["start_date"] = datetime.strptime(act["start_date"], "%Y-%m-%d").date()
-                    act["end_date"]   = datetime.strptime(act["end_date"], "%Y-%m-%d").date()
-                    act["created_at"] = datetime.strptime(act["created_at"], "%Y-%m-%d %H:%M:%S")
-                return data
-        except Exception as e:
-            st.error(f"Error loading activities: {e}")
-            return []
-    return []
+            sd = datetime.strptime(r["start_date"], "%Y-%m-%d").date()
+            ed = datetime.strptime(r["end_date"], "%Y-%m-%d").date()
+        except:
+            # if invalid or blank, skip
+            continue
+        try:
+            ca = datetime.strptime(r.get("created_at",""), "%Y-%m-%d %H:%M:%S")
+        except:
+            ca = datetime.now()
+        out.append({
+            "id": r["id"],
+            "name": r.get("name",""),
+            "start_date": sd,
+            "end_date":   ed,
+            "category":   r.get("category",""),
+            "priority":   r.get("priority",""),
+            "description":r.get("description",""),
+            "created_at": ca
+        })
+    return out
 
 def save_activities(activities):
-    try:
-        out = []
-        for act in activities:
-            a = act.copy()
-            a["start_date"] = a["start_date"].strftime("%Y-%m-%d")
-            a["end_date"]   = a["end_date"].strftime("%Y-%m-%d")
-            a["created_at"] = a["created_at"].strftime("%Y-%m-%d %H:%M:%S")
-            out.append(a)
-        with open(DATA_FILE, "w") as f:
-            json.dump(out, f, indent=2)
-        return True
-    except Exception as e:
-        st.error(f"Error saving activities: {e}")
-        return False
+    ws = sh.worksheet("Activities")
+    # clear everything
+    ws.clear()
+    # write header + rows
+    header = ["id","name","start_date","end_date","category","priority","description","created_at"]
+    rows = [header]
+    for a in activities:
+        rows.append([
+            a["id"],
+            a["name"],
+            a["start_date"].strftime("%Y-%m-%d"),
+            a["end_date"].strftime("%Y-%m-%d"),
+            a["category"],
+            a["priority"],
+            a["description"],
+            a["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+        ])
+    ws.update(rows)
 
-# Helper to zip both JSONs for export
-def generate_export_zip(activities, categories):
-    mem = io.BytesIO()
-    with zipfile.ZipFile(mem, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-        # prepare activities JSON
-        act_list = []
-        for act in activities:
-            a = act.copy()
-            a["start_date"] = a["start_date"].strftime("%Y-%m-%d")
-            a["end_date"]   = a["end_date"].strftime("%Y-%m-%d")
-            a["created_at"] = a["created_at"].strftime("%Y-%m-%d %H:%M:%S")
-            act_list.append(a)
-        zf.writestr(DATA_FILE, json.dumps(act_list, indent=2))
-        zf.writestr(CONFIG_FILE, json.dumps(categories, indent=2))
-    mem.seek(0)
-    return mem.getvalue()
+def load_categories():
+    ws = sh.worksheet("Categories")
+    records = ws.get_all_records()
+    out = {}
+    for r in records:
+        name = r.get("name")
+        color = r.get("color")
+        if name:
+            out[name] = color
+    return out
 
-# Initialize session state
+def save_categories(categories):
+    ws = sh.worksheet("Categories")
+    ws.clear()
+    header = ["name","color"]
+    rows = [header] + [[n,c] for n,c in categories.items()]
+    ws.update(rows)
+
+def get_color_for_activity(cat, cats_dict):
+    return cats_dict.get(cat, "#6C5CE7")
+
+
+# ────────────── SESSION STATE INIT ──────────────
+
 if "activities" not in st.session_state:
     st.session_state.activities = load_activities()
 if "categories" not in st.session_state:
     st.session_state.categories = load_categories()
 
-def get_color_for_activity(cat, cats_dict):
-    return cats_dict.get(cat, "#6C5CE7")
 
-# Title & Status
+# ────────────── HEADER & RELOAD ──────────────
+
 st.title("🗓️ Amrit STP Timeline Manager")
-st.markdown("Add activities with date ranges and visualize them on an interactive timeline")
+st.markdown("Use this app to manage your timeline. All data is read/written to a Google Sheet.")
+
 c1, c2 = st.columns([3,1])
 with c1:
-    if os.path.exists(DATA_FILE):
-        st.success("✅ Data is automatically saved and will persist across sessions")
-    else:
-        st.info("ℹ️ No saved data found - start by adding your first activity")
+    st.success("✅ Connected to Google Sheet")
 with c2:
     if st.button("🔄 Reload Data"):
         st.session_state.activities = load_activities()
+        st.session_state.categories = load_categories()
         st.rerun()
 
-# Sidebar: Add activity & manage categories
+
+# ────────────── SIDEBAR: CATEGORIES + ADD ACTIVITY ──────────────
+
 with st.sidebar:
     st.header("➕ Add New Activity")
+
     with st.expander("🎨 Manage Categories"):
         st.subheader("Current Categories")
         for name, color in st.session_state.categories.items():
@@ -137,22 +165,22 @@ with st.sidebar:
                         st.rerun()
                     else:
                         st.error("Must have at least one category!")
+
         st.subheader("Add New Category")
         with st.form("form_add_cat"):
             nn = st.text_input("Category Name")
             nc = st.color_picker("Category Color", "#FF6B6B")
             if st.form_submit_button("Add Category"):
-                if nn and nn not in st.session_state.categories:
-                    st.session_state.categories[nn] = nc
-                    if save_categories(st.session_state.categories):
-                        st.success(f"Added '{nn}'")
-                    else:
-                        st.error("Failed to save")
-                    st.rerun()
+                if not nn:
+                    st.error("Enter a name")
                 elif nn in st.session_state.categories:
                     st.error("Already exists!")
                 else:
-                    st.error("Enter a name")
+                    st.session_state.categories[nn] = nc
+                    save_categories(st.session_state.categories)
+                    st.success(f"Added '{nn}'")
+                    st.rerun()
+
     with st.form("form_add_act"):
         an = st.text_input("Activity Name")
         c1a, c2a = st.columns(2)
@@ -164,7 +192,11 @@ with st.sidebar:
         pr = st.selectbox("Priority", ["High","Medium","Low"])
         desc = st.text_area("Description (opt.)")
         if st.form_submit_button("Add Activity"):
-            if an and sd <= ed:
+            if not an:
+                st.error("Enter a name")
+            elif sd > ed:
+                st.error("Start ≤ End")
+            else:
                 new = {
                     "id": str(uuid.uuid4()),
                     "name": an,
@@ -176,23 +208,21 @@ with st.sidebar:
                     "created_at": datetime.now()
                 }
                 st.session_state.activities.append(new)
-                if save_activities(st.session_state.activities):
-                    st.success(f"Added '{an}'")
-                else:
-                    st.error("Added but failed to save")
+                save_activities(st.session_state.activities)
+                st.success(f"Added '{an}'")
                 st.rerun()
-            else:
-                st.error("Enter valid name & dates")
 
-# Main layout
+
+# ────────────── MAIN LAYOUT ──────────────
+
 left, right = st.columns([2,1])
 
 with left:
     st.header("📊 Timeline Visualization")
     if st.session_state.activities:
-        acts = sorted(st.session_state.activities, key=lambda x:x["start_date"])
+        acts = sorted(st.session_state.activities, key=lambda x: x["start_date"])
         fig = go.Figure()
-        for i, a in enumerate(acts):
+        for i,a in enumerate(acts):
             col = get_color_for_activity(a["category"], st.session_state.categories)
             fig.add_trace(go.Scatter(
                 x=[a["start_date"], a["end_date"]],
@@ -223,12 +253,13 @@ with left:
             hovermode="closest"
         )
         st.plotly_chart(fig, use_container_width=True)
+
         st.subheader("📅 Calendar View")
         cal = []
-        for a in st.session_state.activities:
+        for a in acts:
             d = a["start_date"]
             while d <= a["end_date"]:
-                cal.append({"date":d, "activity":a["name"]})
+                cal.append({"date": d, "activity": a["name"]})
                 d += timedelta(days=1)
         if cal:
             cdf = pd.DataFrame(cal)
@@ -240,12 +271,12 @@ with left:
 with right:
     st.header("📋 Activity List")
     if st.session_state.activities:
-        acts = sorted(st.session_state.activities, key=lambda x:x["start_date"])
+        acts = sorted(st.session_state.activities, key=lambda x: x["start_date"])
         for a in acts:
             exp = st.expander(f"{a['name']} ({a['category']})")
             with exp:
-                ek = f"edit_{a['id']}"
-                if not st.session_state.get(ek, False):
+                edit_flag = f"edit_{a['id']}"
+                if not st.session_state.get(edit_flag, False):
                     col = get_color_for_activity(a["category"], st.session_state.categories)
                     st.markdown(f"**Category:** <span style='color:{col}'>●</span> {a['category']}", unsafe_allow_html=True)
                     st.write(f"**Start:** {a['start_date']}")
@@ -256,50 +287,56 @@ with right:
                     b1, b2 = st.columns(2)
                     with b1:
                         if st.button("✏️ Edit", key=f"e_{a['id']}"):
-                            st.session_state[ek] = True
+                            st.session_state[edit_flag] = True
                             st.rerun()
                     with b2:
                         if st.button("🗑️ Delete", key=f"d_{a['id']}"):
-                            st.session_state.activities = [x for x in st.session_state.activities if x["id"]!=a["id"]]
+                            st.session_state.activities = [
+                                x for x in st.session_state.activities if x["id"] != a["id"]
+                            ]
                             save_activities(st.session_state.activities)
                             st.rerun()
                 else:
                     with st.form(f"form_{a['id']}"):
                         name2 = st.text_input("Name", value=a["name"])
-                        c1f,c2f = st.columns(2)
+                        c1f, c2f = st.columns(2)
                         with c1f:
                             sd2 = st.date_input("Start", a["start_date"])
                         with c2f:
                             ed2 = st.date_input("End", a["end_date"])
                         cat2 = st.selectbox("Category", list(st.session_state.categories.keys()),
                                             index=list(st.session_state.categories).index(a["category"]))
-                        pr2  = st.selectbox("Priority", ["High","Medium","Low"],
-                                            index=["High","Medium","Low"].index(a["priority"]))
+                        pr2 = st.selectbox("Priority", ["High","Medium","Low"],
+                                           index=["High","Medium","Low"].index(a["priority"]))
                         desc2 = st.text_area("Desc", value=a["description"])
-                        s1,s2 = st.columns(2)
+                        s1, s2 = st.columns(2)
                         with s1:
                             if st.form_submit_button("💾 Save"):
-                                if name2 and sd2<=ed2:
+                                if not name2:
+                                    st.error("Enter a name")
+                                elif sd2 > ed2:
+                                    st.error("Start ≤ End")
+                                else:
+                                    # update
                                     for idx,x in enumerate(st.session_state.activities):
-                                        if x["id"]==a["id"]:
+                                        if x["id"] == a["id"]:
                                             st.session_state.activities[idx].update({
-                                                "name":name2,
-                                                "start_date":sd2,
-                                                "end_date":ed2,
-                                                "category":cat2,
-                                                "priority":pr2,
-                                                "description":desc2
+                                                "name": name2,
+                                                "start_date": sd2,
+                                                "end_date": ed2,
+                                                "category": cat2,
+                                                "priority": pr2,
+                                                "description": desc2
                                             })
                                             break
                                     save_activities(st.session_state.activities)
-                                    st.session_state[ek] = False
+                                    st.session_state[edit_flag] = False
                                     st.rerun()
-                                else:
-                                    st.error("Invalid data")
                         with s2:
                             if st.form_submit_button("❌ Cancel"):
-                                st.session_state[ek] = False
+                                st.session_state[edit_flag] = False
                                 st.rerun()
+
         # Summary & CSV Export
         st.subheader("📈 Summary")
         tot = len(st.session_state.activities)
@@ -313,101 +350,96 @@ with right:
         for k,v in pris.items():
             st.write(f"• {k}: {v}")
 
-        st.subheader("💾 Export Data")
-        if st.button("📥 Download as CSV"):
-            df = pd.DataFrame(st.session_state.activities)
-            csv = df.to_csv(index=False)
-            st.download_button("Download CSV", data=csv, file_name="activities.csv", mime="text/csv")
+        st.subheader("💾 Export as CSV")
+        df = pd.DataFrame(st.session_state.activities)
+        csv = df.to_csv(index=False)
+        st.download_button("Download Activities CSV", data=csv, file_name="activities.csv", mime="text/csv")
+
     else:
         st.info("No activities to display")
 
-    # ─────── Data Management (always visible) ─────────
+    # ────────────── DATA MANAGEMENT ──────────────
+
     st.subheader("🔧 Data Management")
 
-    # Export both JSONs as a ZIP
-    zip_data = generate_export_zip(st.session_state.activities, st.session_state.categories)
-    st.download_button(
-        "📥 Download JSON (Activities + Categories)",
-        data=zip_data,
-        file_name="amrit_export.zip",
-        mime="application/zip"
-    )
+    # Download entire Google Sheet as Excel
+    if st.button("📥 Download Google-Sheet as Excel"):
+        # read both sheets
+        df_acts = pd.DataFrame(sh.worksheet("Activities").get_all_records())
+        df_cats = pd.DataFrame(sh.worksheet("Categories").get_all_records())
+        towrite = io.BytesIO()
+        with pd.ExcelWriter(towrite, engine="xlsxwriter") as writer:
+            df_acts.to_excel(writer, sheet_name="Activities", index=False)
+            df_cats.to_excel(writer, sheet_name="Categories", index=False)
+        towrite.seek(0)
+        st.download_button(
+            label="Click to download .xlsx",
+            data=towrite,
+            file_name="amrit_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
-    # Import activities from CSV
-    up_csv = st.file_uploader("📤 Import activities from CSV", type=["csv"], key="impcsv")
-    if up_csv:
+    # Upload an Excel file to overwrite both tabs
+    up_xlsx = st.file_uploader("📤 Upload .xlsx to overwrite Sheet", type=["xlsx"])
+    if up_xlsx:
         try:
-            df_imp = pd.read_csv(up_csv)
-            df_imp["start_date"] = pd.to_datetime(df_imp["start_date"]).dt.date
-            df_imp["end_date"]   = pd.to_datetime(df_imp["end_date"]).dt.date
-            if "created_at" in df_imp.columns:
-                df_imp["created_at"] = pd.to_datetime(df_imp["created_at"])
-            else:
-                df_imp["created_at"] = datetime.now()
-            if st.button("Confirm Import CSV", key="imp_csv_btn"):
-                if "id" not in df_imp.columns:
-                    df_imp["id"] = [str(uuid.uuid4()) for _ in range(len(df_imp))]
-                recs = df_imp.to_dict("records")
-                st.session_state.activities.extend(recs)
-                save_activities(st.session_state.activities)
-                st.success(f"Imported {len(recs)} activities from CSV")
-                st.rerun()
+            all_dfs = pd.read_excel(up_xlsx, sheet_name=None)
         except Exception as e:
-            st.error(f"Error importing CSV: {e}")
+            st.error(f"Error reading 📥 Excel: {e}")
+            all_dfs = None
 
-    # Import activities from JSON
-    up_act_j = st.file_uploader("📤 Import activities from JSON", type=["json"], key="impjson_act")
-    if up_act_j:
-        try:
-            text = up_act_j.getvalue().decode("utf-8")
-            arr  = json.loads(text)
-            if not isinstance(arr, list):
-                st.error("Activities JSON must be an array")
-            else:
-                if st.button("Confirm Import Activities JSON", key="imp_json_act_btn"):
-                    to_add = []
-                    for r in arr:
-                        parsed = {
-                            "id": r.get("id", str(uuid.uuid4())),
-                            "name": r.get("name",""),
-                            "start_date": datetime.strptime(r["start_date"],"%Y-%m-%d").date(),
-                            "end_date":   datetime.strptime(r["end_date"],  "%Y-%m-%d").date(),
-                            "category":   r.get("category",""),
-                            "priority":   r.get("priority",""),
-                            "description":r.get("description",""),
-                            "created_at": datetime.strptime(r.get("created_at"),"%Y-%m-%d %H:%M:%S") if r.get("created_at") else datetime.now()
+        if all_dfs:
+            if st.button("✅ Confirm Overwrite Google-Sheet from .xlsx"):
+                # categories
+                if "Categories" not in all_dfs or "Activities" not in all_dfs:
+                    st.error("Excel must have both 'Activities' and 'Categories' sheets")
+                else:
+                    # parse categories
+                    dfc = all_dfs["Categories"]
+                    cats = {row["name"]: row["color"] for _,row in dfc.iterrows() if pd.notna(row.get("name"))}
+                    # parse activities
+                    dfa = all_dfs["Activities"]
+                    acts = []
+                    for _,row in dfa.iterrows():
+                        try:
+                            sd = pd.to_datetime(row["start_date"]).date()
+                            ed = pd.to_datetime(row["end_date"]).date()
+                        except:
+                            continue
+                        ca = None
+                        if "created_at" in row and pd.notna(row["created_at"]):
+                            try:
+                                ca = pd.to_datetime(row["created_at"]).to_pydatetime()
+                            except:
+                                ca = datetime.now()
+                        else:
+                            ca = datetime.now()
+                        act = {
+                            "id": str(row["id"]) if pd.notna(row["id"]) else str(uuid.uuid4()),
+                            "name": row.get("name",""),
+                            "start_date": sd,
+                            "end_date": ed,
+                            "category": row.get("category",""),
+                            "priority": row.get("priority",""),
+                            "description": row.get("description",""),
+                            "created_at": ca
                         }
-                        to_add.append(parsed)
-                    st.session_state.activities.extend(to_add)
-                    save_activities(st.session_state.activities)
-                    st.success(f"Imported {len(to_add)} activities from JSON")
+                        acts.append(act)
+                    # overwrite
+                    st.session_state.categories = cats
+                    st.session_state.activities = acts
+                    save_categories(cats)
+                    save_activities(acts)
+                    st.success("✅ Overwrote Google Sheet from uploaded Excel")
                     st.rerun()
-        except Exception as e:
-            st.error(f"Error parsing activities JSON: {e}")
 
-    # Import categories from JSON
-    up_cat_j = st.file_uploader("📤 Import categories from JSON", type=["json"], key="impjson_cat")
-    if up_cat_j:
-        try:
-            txt = up_cat_j.getvalue().decode("utf-8")
-            cd  = json.loads(txt)
-            if not isinstance(cd, dict):
-                st.error("Categories JSON must be an object")
-            else:
-                if st.button("Confirm Import Categories JSON", key="imp_json_cat_btn"):
-                    st.session_state.categories = cd
-                    save_categories(cd)
-                    st.success("Imported categories from JSON")
-                    st.rerun()
-        except Exception as e:
-            st.error(f"Error parsing categories JSON: {e}")
-
-    # Clear all activities
-    if st.button("🗑️ Clear All Activities", type="secondary", key="clear_all_btn"):
+    # Clear all
+    if st.button("🗑️ Clear All Activities", type="secondary"):
+        save_activities([])
         st.session_state.activities = []
-        save_activities(st.session_state.activities)
+        st.success("All activities cleared")
         st.rerun()
 
-# Footer
+# ────────────── FOOTER ──────────────
 st.markdown("---")
-st.markdown("*Built by Amrit | Data automatically saves across sessions*")
+st.markdown("*Built by Amrit | Data lives in Google Sheets*")
