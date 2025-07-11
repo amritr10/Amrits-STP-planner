@@ -124,6 +124,8 @@ if "activities" not in st.session_state:
     st.session_state.activities = load_activities()
 if "categories" not in st.session_state:
     st.session_state.categories = load_categories()
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
 
 
 # ────────────── HEADER & RELOAD ──────────────
@@ -141,76 +143,86 @@ with c2:
         st.rerun()
 
 
-# ────────────── SIDEBAR: CATEGORIES + ADD ACTIVITY ──────────────
+# ────────────── SIDEBAR: LOGIN + SECURED CONTENT ──────────────
 
 with st.sidebar:
-    st.header("➕ Add New Activity")
-
-    with st.expander("🎨 Manage Categories"):
-        st.subheader("Current Categories")
-        for name, color in st.session_state.categories.items():
-            col1, col2, col3 = st.columns([2,1,1])
-            with col1:
-                st.markdown(f"<span style='color:{color}'>●</span> {name}", unsafe_allow_html=True)
-            with col2:
-                newc = st.color_picker("", value=color, key=f"col_{name}")
-                if newc != color:
-                    st.session_state.categories[name] = newc
-                    save_categories(st.session_state.categories)
-            with col3:
-                if st.button("🗑️", key=f"del_{name}"):
-                    if len(st.session_state.categories) > 1:
-                        del st.session_state.categories[name]
-                        save_categories(st.session_state.categories)
-                        st.rerun()
-                    else:
-                        st.error("Must have at least one category!")
-
-        st.subheader("Add New Category")
-        with st.form("form_add_cat"):
-            nn = st.text_input("Category Name")
-            nc = st.color_picker("Category Color", "#FF6B6B")
-            if st.form_submit_button("Add Category"):
-                if not nn:
-                    st.error("Enter a name")
-                elif nn in st.session_state.categories:
-                    st.error("Already exists!")
-                else:
-                    st.session_state.categories[nn] = nc
-                    save_categories(st.session_state.categories)
-                    st.success(f"Added '{nn}'")
-                    st.rerun()
-
-    with st.form("form_add_act"):
-        an = st.text_input("Activity Name")
-        c1a, c2a = st.columns(2)
-        with c1a:
-            sd = st.date_input("Start Date", datetime.now().date())
-        with c2a:
-            ed = st.date_input("End Date", datetime.now().date() + timedelta(days=1))
-        cat = st.selectbox("Category", list(st.session_state.categories.keys()))
-        pr = st.selectbox("Priority", ["High","Medium","Low"])
-        desc = st.text_area("Description (opt.)")
-        if st.form_submit_button("Add Activity"):
-            if not an:
-                st.error("Enter a name")
-            elif sd > ed:
-                st.error("Start ≤ End")
-            else:
-                new = {
-                    "id": str(uuid.uuid4()),
-                    "name": an,
-                    "start_date": sd,
-                    "end_date": ed,
-                    "category": cat,
-                    "priority": pr,
-                    "description": desc,
-                    "created_at": datetime.now()
-                }
-                st.session_state.activities.append(new)
-                save_activities(st.session_state.activities)
-                st.success(f"Added '{an}'")
+    if not st.session_state.authenticated:
+        pwd = st.text_input("Password", type="password", key="password_input")
+        if st.button("Login", key="login_button"):
+            if pwd == "Amrit123#":
+                st.session_state.authenticated = True
+                st.success("🔓 Logged in")
                 st.rerun()
+            else:
+                st.error("❌ Incorrect password")
+    else:
+        st.header("➕ Add New Activity")
+
+        with st.expander("🎨 Manage Categories"):
+            st.subheader("Current Categories")
+            for name, color in st.session_state.categories.items():
+                col1, col2, col3 = st.columns([2,1,1])
+                with col1:
+                    st.markdown(f"<span style='color:{color}'>●</span> {name}", unsafe_allow_html=True)
+                with col2:
+                    newc = st.color_picker("", value=color, key=f"col_{name}")
+                    if newc != color:
+                        st.session_state.categories[name] = newc
+                        save_categories(st.session_state.categories)
+                with col3:
+                    if st.button("🗑️", key=f"del_{name}"):
+                        if len(st.session_state.categories) > 1:
+                            del st.session_state.categories[name]
+                            save_categories(st.session_state.categories)
+                            st.rerun()
+                        else:
+                            st.error("Must have at least one category!")
+
+            st.subheader("Add New Category")
+            with st.form("form_add_cat"):
+                nn = st.text_input("Category Name")
+                nc = st.color_picker("Category Color", "#FF6B6B")
+                if st.form_submit_button("Add Category"):
+                    if not nn:
+                        st.error("Enter a name")
+                    elif nn in st.session_state.categories:
+                        st.error("Already exists!")
+                    else:
+                        st.session_state.categories[nn] = nc
+                        save_categories(st.session_state.categories)
+                        st.success(f"Added '{nn}'")
+                        st.rerun()
+
+        with st.form("form_add_act"):
+            an = st.text_input("Activity Name")
+            c1a, c2a = st.columns(2)
+            with c1a:
+                sd = st.date_input("Start Date", datetime.now().date())
+            with c2a:
+                ed = st.date_input("End Date", datetime.now().date() + timedelta(days=1))
+            cat = st.selectbox("Category", list(st.session_state.categories.keys()))
+            pr = st.selectbox("Priority", ["High","Medium","Low"])
+            desc = st.text_area("Description (opt.)")
+            if st.form_submit_button("Add Activity"):
+                if not an:
+                    st.error("Enter a name")
+                elif sd > ed:
+                    st.error("Start ≤ End")
+                else:
+                    new = {
+                        "id": str(uuid.uuid4()),
+                        "name": an,
+                        "start_date": sd,
+                        "end_date": ed,
+                        "category": cat,
+                        "priority": pr,
+                        "description": desc,
+                        "created_at": datetime.now()
+                    }
+                    st.session_state.activities.append(new)
+                    save_activities(st.session_state.activities)
+                    st.success(f"Added '{an}'")
+                    st.rerun()
 
 
 # ────────────── MAIN LAYOUT ──────────────
@@ -304,10 +316,8 @@ with right:
                             sd2 = st.date_input("Start", a["start_date"])
                         with c2f:
                             ed2 = st.date_input("End", a["end_date"])
-                        cat2 = st.selectbox("Category", list(st.session_state.categories.keys()),
-                                            index=list(st.session_state.categories).index(a["category"]))
-                        pr2 = st.selectbox("Priority", ["High","Medium","Low"],
-                                           index=["High","Medium","Low"].index(a["priority"]))
+                        cat2 = st.selectbox("Category", list(st.session_state.categories.keys()), index=list(st.session_state.categories).index(a["category"]))
+                        pr2 = st.selectbox("Priority", ["High","Medium","Low"], index=["High","Medium","Low"].index(a["priority"]))
                         desc2 = st.text_area("Desc", value=a["description"])
                         s1, s2 = st.columns(2)
                         with s1:
@@ -355,90 +365,85 @@ with right:
         csv = df.to_csv(index=False)
         st.download_button("Download Activities CSV", data=csv, file_name="activities.csv", mime="text/csv")
 
-    else:
-        st.info("No activities to display")
-
-    # ────────────── DATA MANAGEMENT ──────────────
-
-    st.subheader("🔧 Data Management")
-
-    # Download entire Google Sheet as Excel
-    if st.button("📥 Download Google-Sheet as Excel"):
-        # read both sheets
-        df_acts = pd.DataFrame(sh.worksheet("Activities").get_all_records())
-        df_cats = pd.DataFrame(sh.worksheet("Categories").get_all_records())
-        towrite = io.BytesIO()
-        with pd.ExcelWriter(towrite, engine="xlsxwriter") as writer:
-            df_acts.to_excel(writer, sheet_name="Activities", index=False)
-            df_cats.to_excel(writer, sheet_name="Categories", index=False)
-        towrite.seek(0)
-        st.download_button(
-            label="Click to download .xlsx",
-            data=towrite,
-            file_name="amrit_data.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-    # Upload an Excel file to overwrite both tabs
-    up_xlsx = st.file_uploader("📤 Upload .xlsx to overwrite Sheet", type=["xlsx"])
-    if up_xlsx:
-        try:
-            all_dfs = pd.read_excel(up_xlsx, sheet_name=None)
-        except Exception as e:
-            st.error(f"Error reading 📥 Excel: {e}")
-            all_dfs = None
-
-        if all_dfs:
-            if st.button("✅ Confirm Overwrite Google-Sheet from .xlsx"):
-                # categories
-                if "Categories" not in all_dfs or "Activities" not in all_dfs:
-                    st.error("Excel must have both 'Activities' and 'Categories' sheets")
-                else:
-                    # parse categories
-                    dfc = all_dfs["Categories"]
-                    cats = {row["name"]: row["color"] for _,row in dfc.iterrows() if pd.notna(row.get("name"))}
-                    # parse activities
-                    dfa = all_dfs["Activities"]
-                    acts = []
-                    for _,row in dfa.iterrows():
-                        try:
-                            sd = pd.to_datetime(row["start_date"]).date()
-                            ed = pd.to_datetime(row["end_date"]).date()
-                        except:
-                            continue
-                        ca = None
-                        if "created_at" in row and pd.notna(row["created_at"]):
-                            try:
-                                ca = pd.to_datetime(row["created_at"]).to_pydatetime()
-                            except:
-                                ca = datetime.now()
+        # ────────────── DATA MANAGEMENT ──────────────
+        if st.session_state.authenticated:
+            st.subheader("🔧 Data Management")
+            # Download entire Google Sheet as Excel
+            if st.button("📥 Download Google-Sheet as Excel"):
+                # read both sheets
+                df_acts = pd.DataFrame(sh.worksheet("Activities").get_all_records())
+                df_cats = pd.DataFrame(sh.worksheet("Categories").get_all_records())
+                towrite = io.BytesIO()
+                with pd.ExcelWriter(towrite, engine="xlsxwriter") as writer:
+                    df_acts.to_excel(writer, sheet_name="Activities", index=False)
+                    df_cats.to_excel(writer, sheet_name="Categories", index=False)
+                towrite.seek(0)
+                st.download_button(
+                    label="Click to download .xlsx",
+                    data=towrite,
+                    file_name="amrit_data.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            # Upload an Excel file to overwrite both tabs
+            up_xlsx = st.file_uploader("📤 Upload .xlsx to overwrite Sheet", type=["xlsx"])
+            if up_xlsx:
+                try:
+                    all_dfs = pd.read_excel(up_xlsx, sheet_name=None)
+                except Exception as e:
+                    st.error(f"Error reading 📥 Excel: {e}")
+                    all_dfs = None
+                if all_dfs:
+                    if st.button("✅ Confirm Overwrite Google-Sheet from .xlsx"):
+                        # categories
+                        if "Categories" not in all_dfs or "Activities" not in all_dfs:
+                            st.error("Excel must have both 'Activities' and 'Categories' sheets")
                         else:
-                            ca = datetime.now()
-                        act = {
-                            "id": str(row["id"]) if pd.notna(row["id"]) else str(uuid.uuid4()),
-                            "name": row.get("name",""),
-                            "start_date": sd,
-                            "end_date": ed,
-                            "category": row.get("category",""),
-                            "priority": row.get("priority",""),
-                            "description": row.get("description",""),
-                            "created_at": ca
-                        }
-                        acts.append(act)
-                    # overwrite
-                    st.session_state.categories = cats
-                    st.session_state.activities = acts
-                    save_categories(cats)
-                    save_activities(acts)
-                    st.success("✅ Overwrote Google Sheet from uploaded Excel")
-                    st.rerun()
-
-    # Clear all
-    if st.button("🗑️ Clear All Activities", type="secondary"):
-        save_activities([])
-        st.session_state.activities = []
-        st.success("All activities cleared")
-        st.rerun()
+                            # parse categories
+                            dfc = all_dfs["Categories"]
+                            cats = {row["name"]: row["color"] for _,row in dfc.iterrows() if pd.notna(row.get("name"))}
+                            # parse activities
+                            dfa = all_dfs["Activities"]
+                            acts = []
+                            for _,row in dfa.iterrows():
+                                try:
+                                    sd = pd.to_datetime(row["start_date"]).date()
+                                    ed = pd.to_datetime(row["end_date"]).date()
+                                except:
+                                    continue
+                                ca = None
+                                if "created_at" in row and pd.notna(row["created_at"]):
+                                    try:
+                                        ca = pd.to_datetime(row["created_at"]).to_pydatetime()
+                                    except:
+                                        ca = datetime.now()
+                                else:
+                                    ca = datetime.now()
+                                act = {
+                                    "id": str(row["id"]) if pd.notna(row["id"]) else str(uuid.uuid4()),
+                                    "name": row.get("name",""),
+                                    "start_date": sd,
+                                    "end_date": ed,
+                                    "category": row.get("category",""),
+                                    "priority": row.get("priority",""),
+                                    "description": row.get("description",""),
+                                    "created_at": ca
+                                }
+                                acts.append(act)
+                            # overwrite
+                            st.session_state.categories = cats
+                            st.session_state.activities = acts
+                            save_categories(cats)
+                            save_activities(acts)
+                            st.success("✅ Overwrote Google Sheet from uploaded Excel")
+                            st.rerun()
+            # Clear all
+            if st.button("🗑️ Clear All Activities", type="secondary"):
+                save_activities([])
+                st.session_state.activities = []
+                st.success("All activities cleared")
+                st.rerun()
+        else:
+            st.info("🔒 Please login to access Data Management")
 
 # ────────────── FOOTER ──────────────
 st.markdown("---")
