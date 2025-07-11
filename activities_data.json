@@ -6,7 +6,7 @@
     "end_date": "2025-06-20",
     "category": "Meeting",
     "priority": "High",
-    "description": "",
+    "description": "Disty meeting",
     "created_at": "2025-07-10 10:54:05"
   },
   {
@@ -14,7 +14,7 @@
     "name": "Product Registration",
     "start_date": "2025-06-18",
     "end_date": "2025-07-11",
-    "category": "Administrative Tasks",
+    "category": "Work",
     "priority": "High",
     "description": "E3AS-HF, ZP-L, VHV5, M1 drives registration",
     "created_at": "2025-07-10 10:55:27"
@@ -24,9 +24,9 @@
     "name": "Procure Demo Stock E3AS, ZP-L and VHV5",
     "start_date": "2025-06-18",
     "end_date": "2025-07-16",
-    "category": "Work",
+    "category": "Administrative Tasks",
     "priority": "High",
-    "description": "",
+    "description": "admin tasks, SCM ordering",
     "created_at": "2025-07-10 10:58:52"
   },
   {
@@ -128,5 +128,25 @@
     "priority": "Medium",
     "description": "EDM to landing page. landing page to demo request form or purchase page.",
     "created_at": "2025-07-10 11:23:17"
+  },
+  {
+    "id": "c19355c9-3cff-4d15-9ae0-9ed9d541a197",
+    "name": "M1 Drive Demo kit (solutions team)",
+    "start_date": "2025-09-01",
+    "end_date": "2025-09-26",
+    "category": "Project",
+    "priority": "High",
+    "description": "Solutions team, Andrew to build a demo kit. Raph to train engineers using kit.",
+    "created_at": "2025-07-10 04:06:44"
+  },
+  {
+    "id": "1e6cfc82-3304-4bc4-820a-6f1a576cf2ed",
+    "name": "M1 Drive internal demos (Teams)",
+    "start_date": "2025-09-26",
+    "end_date": "2025-09-26",
+    "category": "Meeting",
+    "priority": "Medium",
+    "description": "Engineering team, Andrew to build a demo kit to train engineers",
+    "created_at": "2025-07-10 04:07:33"
   }
 ]

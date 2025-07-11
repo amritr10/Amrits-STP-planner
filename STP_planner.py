@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import uuid
 import json
 import os
+import io
+import zipfile
 
 # Set page config
 st.set_page_config(page_title="Amrit STP Timeline Manager", layout="wide")
@@ -16,457 +18,395 @@ CONFIG_FILE = "categories_config.json"
 
 # Helper functions for category configuration
 def load_categories():
-    """Load categories and their colors from JSON file"""
     default_categories = {
         "Work": "#FF6B6B",
-        "Personal": "#4ECDC4", 
+        "Personal": "#4ECDC4",
         "Project": "#45B7D1",
         "Meeting": "#FFA07A",
         "Travel": "#98D8C8",
         "Other": "#6C5CE7"
     }
-    
     if os.path.exists(CONFIG_FILE):
         try:
-            with open(CONFIG_FILE, 'r') as f:
+            with open(CONFIG_FILE, "r") as f:
                 return json.load(f)
-        except (json.JSONDecodeError, KeyError) as e:
+        except Exception as e:
             st.error(f"Error loading categories config: {e}")
             return default_categories
     return default_categories
 
 def save_categories(categories):
-    """Save categories and their colors to JSON file"""
     try:
-        with open(CONFIG_FILE, 'w') as f:
+        with open(CONFIG_FILE, "w") as f:
             json.dump(categories, f, indent=2)
         return True
     except Exception as e:
         st.error(f"Error saving categories config: {e}")
         return False
+
 def load_activities():
-    """Load activities from JSON file"""
     if os.path.exists(DATA_FILE):
         try:
-            with open(DATA_FILE, 'r') as f:
+            with open(DATA_FILE, "r") as f:
                 data = json.load(f)
-                # Convert date strings back to date objects
-                for activity in data:
-                    activity['start_date'] = datetime.strptime(activity['start_date'], '%Y-%m-%d').date()
-                    activity['end_date'] = datetime.strptime(activity['end_date'], '%Y-%m-%d').date()
-                    activity['created_at'] = datetime.strptime(activity['created_at'], '%Y-%m-%d %H:%M:%S')
+                for act in data:
+                    act["start_date"] = datetime.strptime(act["start_date"], "%Y-%m-%d").date()
+                    act["end_date"]   = datetime.strptime(act["end_date"], "%Y-%m-%d").date()
+                    act["created_at"] = datetime.strptime(act["created_at"], "%Y-%m-%d %H:%M:%S")
                 return data
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            st.error(f"Error loading data: {e}")
+        except Exception as e:
+            st.error(f"Error loading activities: {e}")
             return []
     return []
 
 def save_activities(activities):
-    """Save activities to JSON file"""
     try:
-        # Convert date objects to strings for JSON serialization
-        data_to_save = []
-        for activity in activities:
-            activity_copy = activity.copy()
-            activity_copy['start_date'] = activity['start_date'].strftime('%Y-%m-%d')
-            activity_copy['end_date'] = activity['end_date'].strftime('%Y-%m-%d')
-            activity_copy['created_at'] = activity['created_at'].strftime('%Y-%m-%d %H:%M:%S')
-            data_to_save.append(activity_copy)
-        
-        with open(DATA_FILE, 'w') as f:
-            json.dump(data_to_save, f, indent=2)
+        out = []
+        for act in activities:
+            a = act.copy()
+            a["start_date"] = a["start_date"].strftime("%Y-%m-%d")
+            a["end_date"]   = a["end_date"].strftime("%Y-%m-%d")
+            a["created_at"] = a["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+            out.append(a)
+        with open(DATA_FILE, "w") as f:
+            json.dump(out, f, indent=2)
         return True
     except Exception as e:
-        st.error(f"Error saving data: {e}")
+        st.error(f"Error saving activities: {e}")
         return False
 
-# Initialize session state for storing activities and categories
-if 'activities' not in st.session_state:
-    st.session_state.activities = load_activities()
+# Helper to zip both JSONs for export
+def generate_export_zip(activities, categories):
+    mem = io.BytesIO()
+    with zipfile.ZipFile(mem, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        # prepare activities JSON
+        act_list = []
+        for act in activities:
+            a = act.copy()
+            a["start_date"] = a["start_date"].strftime("%Y-%m-%d")
+            a["end_date"]   = a["end_date"].strftime("%Y-%m-%d")
+            a["created_at"] = a["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+            act_list.append(a)
+        zf.writestr(DATA_FILE, json.dumps(act_list, indent=2))
+        zf.writestr(CONFIG_FILE, json.dumps(categories, indent=2))
+    mem.seek(0)
+    return mem.getvalue()
 
-if 'categories' not in st.session_state:
+# Initialize session state
+if "activities" not in st.session_state:
+    st.session_state.activities = load_activities()
+if "categories" not in st.session_state:
     st.session_state.categories = load_categories()
 
-if 'data_loaded' not in st.session_state:
-    st.session_state.data_loaded = True
+def get_color_for_activity(cat, cats_dict):
+    return cats_dict.get(cat, "#6C5CE7")
 
-# Helper function to get color for activity based on category
-def get_color_for_activity(category, categories_dict):
-    return categories_dict.get(category, "#6C5CE7")  # Default purple if category not found
-
-# Main title
+# Title & Status
 st.title("🗓️ Amrit STP Timeline Manager")
 st.markdown("Add activities with date ranges and visualize them on an interactive timeline")
-
-# Display data persistence status
-col_status1, col_status2 = st.columns([3, 1])
-with col_status1:
+c1, c2 = st.columns([3,1])
+with c1:
     if os.path.exists(DATA_FILE):
         st.success("✅ Data is automatically saved and will persist across sessions")
     else:
         st.info("ℹ️ No saved data found - start by adding your first activity")
-
-with col_status2:
+with c2:
     if st.button("🔄 Reload Data"):
         st.session_state.activities = load_activities()
         st.rerun()
 
-# Sidebar for adding new activities and managing categories
+# Sidebar: Add activity & manage categories
 with st.sidebar:
     st.header("➕ Add New Activity")
-    
-    # Category management section
     with st.expander("🎨 Manage Categories"):
         st.subheader("Current Categories")
-        
-        # Display existing categories with color indicators
-        for cat_name, cat_color in st.session_state.categories.items():
-            col1, col2, col3 = st.columns([2, 1, 1])
+        for name, color in st.session_state.categories.items():
+            col1, col2, col3 = st.columns([2,1,1])
             with col1:
-                st.markdown(f"<span style='color: {cat_color}'>●</span> {cat_name}", unsafe_allow_html=True)
+                st.markdown(f"<span style='color:{color}'>●</span> {name}", unsafe_allow_html=True)
             with col2:
-                new_color = st.color_picker(f"", value=cat_color, key=f"color_{cat_name}")
-                if new_color != cat_color:
-                    st.session_state.categories[cat_name] = new_color
+                newc = st.color_picker("", value=color, key=f"col_{name}")
+                if newc != color:
+                    st.session_state.categories[name] = newc
                     save_categories(st.session_state.categories)
             with col3:
-                if st.button("🗑️", key=f"del_cat_{cat_name}"):
-                    if len(st.session_state.categories) > 1:  # Keep at least one category
-                        del st.session_state.categories[cat_name]
+                if st.button("🗑️", key=f"del_{name}"):
+                    if len(st.session_state.categories) > 1:
+                        del st.session_state.categories[name]
                         save_categories(st.session_state.categories)
                         st.rerun()
                     else:
                         st.error("Must have at least one category!")
-        
-        # Add new category
         st.subheader("Add New Category")
-        with st.form("add_category"):
-            new_cat_name = st.text_input("Category Name")
-            new_cat_color = st.color_picker("Category Color", value="#FF6B6B")
-            
+        with st.form("form_add_cat"):
+            nn = st.text_input("Category Name")
+            nc = st.color_picker("Category Color", "#FF6B6B")
             if st.form_submit_button("Add Category"):
-                if new_cat_name and new_cat_name not in st.session_state.categories:
-                    st.session_state.categories[new_cat_name] = new_cat_color
+                if nn and nn not in st.session_state.categories:
+                    st.session_state.categories[nn] = nc
                     if save_categories(st.session_state.categories):
-                        st.success(f"Added category '{new_cat_name}'!")
+                        st.success(f"Added '{nn}'")
                     else:
-                        st.error("Failed to save category")
+                        st.error("Failed to save")
                     st.rerun()
-                elif new_cat_name in st.session_state.categories:
-                    st.error("Category already exists!")
+                elif nn in st.session_state.categories:
+                    st.error("Already exists!")
                 else:
-                    st.error("Please enter a category name")
-    
-    with st.form("add_activity"):
-        activity_name = st.text_input("Activity Name", placeholder="Enter activity name...")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input("Start Date", value=datetime.now().date())
-        with col2:
-            end_date = st.date_input("End Date", value=datetime.now().date() + timedelta(days=1))
-        
-        activity_category = st.selectbox(
-            "Category",
-            list(st.session_state.categories.keys())
-        )
-        
-        priority = st.selectbox(
-            "Priority",
-            ["High", "Medium", "Low"]
-        )
-        
-        description = st.text_area("Description (optional)", placeholder="Add details about the activity...")
-        
-        submit_button = st.form_submit_button("Add Activity", use_container_width=True)
-        
-        if submit_button:
-            if activity_name and start_date <= end_date:
-                new_activity = {
-                    'id': str(uuid.uuid4()),
-                    'name': activity_name,
-                    'start_date': start_date,
-                    'end_date': end_date,
-                    'category': activity_category,
-                    'priority': priority,
-                    'description': description,
-                    'created_at': datetime.now()
+                    st.error("Enter a name")
+    with st.form("form_add_act"):
+        an = st.text_input("Activity Name")
+        c1a, c2a = st.columns(2)
+        with c1a:
+            sd = st.date_input("Start Date", datetime.now().date())
+        with c2a:
+            ed = st.date_input("End Date", datetime.now().date() + timedelta(days=1))
+        cat = st.selectbox("Category", list(st.session_state.categories.keys()))
+        pr = st.selectbox("Priority", ["High","Medium","Low"])
+        desc = st.text_area("Description (opt.)")
+        if st.form_submit_button("Add Activity"):
+            if an and sd <= ed:
+                new = {
+                    "id": str(uuid.uuid4()),
+                    "name": an,
+                    "start_date": sd,
+                    "end_date": ed,
+                    "category": cat,
+                    "priority": pr,
+                    "description": desc,
+                    "created_at": datetime.now()
                 }
-                st.session_state.activities.append(new_activity)
-                
-                # Save to file
+                st.session_state.activities.append(new)
                 if save_activities(st.session_state.activities):
-                    st.success(f"✅ Added '{activity_name}' and saved to file!")
+                    st.success(f"Added '{an}'")
                 else:
-                    st.error("❌ Activity added but failed to save to file")
+                    st.error("Added but failed to save")
                 st.rerun()
             else:
-                st.error("❌ Please enter a valid activity name and ensure start date is before end date.")
+                st.error("Enter valid name & dates")
 
-# Main content area
-col1, col2 = st.columns([2, 1])
+# Main layout
+left, right = st.columns([2,1])
 
-with col1:
+with left:
     st.header("📊 Timeline Visualization")
-    
     if st.session_state.activities:
-        # Sort activities by start date (earliest first)
-        sorted_activities = sorted(st.session_state.activities, key=lambda x: x['start_date'])
-        
-        # Create timeline chart
-        df = pd.DataFrame(sorted_activities)
-        
-        # Create Gantt chart using plotly
+        acts = sorted(st.session_state.activities, key=lambda x:x["start_date"])
         fig = go.Figure()
-        
-        for i, activity in enumerate(sorted_activities):
-            color = get_color_for_activity(activity['category'], st.session_state.categories)
-            
-            # Add horizontal bar for each activity
+        for i, a in enumerate(acts):
+            col = get_color_for_activity(a["category"], st.session_state.categories)
             fig.add_trace(go.Scatter(
-                x=[activity['start_date'], activity['end_date']],
-                y=[i, i],
-                mode='lines+markers',
-                line=dict(color=color, width=20),
-                marker=dict(size=8, color=color),
-                name=activity['name'],
-                hovertemplate=f"<b>{activity['name']}</b><br>" +
-                             f"Category: {activity['category']}<br>" +
-                             f"Priority: {activity['priority']}<br>" +
-                             f"Start: {activity['start_date']}<br>" +
-                             f"End: {activity['end_date']}<br>" +
-                             f"Description: {activity['description']}<extra></extra>",
+                x=[a["start_date"], a["end_date"]],
+                y=[i,i],
+                mode="lines+markers",
+                line=dict(color=col, width=20),
+                marker=dict(size=8,color=col),
+                hovertemplate=(
+                    f"<b>{a['name']}</b><br>"
+                    f"Category: {a['category']}<br>"
+                    f"Priority: {a['priority']}<br>"
+                    f"Start: {a['start_date']}<br>"
+                    f"End: {a['end_date']}<br>"
+                    f"Desc: {a['description']}<extra></extra>"
+                ),
                 showlegend=False
             ))
-        
-        # Update layout - reverse y-axis so earliest dates appear at top
         fig.update_layout(
-            title="Activity Timeline (Sorted by Start Date)",
+            title="Activity Timeline",
             xaxis_title="Date",
-            yaxis_title="Activities",
             yaxis=dict(
-                tickmode='array',
-                tickvals=list(range(len(sorted_activities))),
-                ticktext=[act['name'] for act in sorted_activities],
-                autorange='reversed'  # This reverses the y-axis
+                tickmode="array",
+                tickvals=list(range(len(acts))),
+                ticktext=[a["name"] for a in acts],
+                autorange="reversed"
             ),
-            height=max(400, len(sorted_activities) * 50),
-            hovermode='closest'
+            height=max(400, len(acts)*50),
+            hovermode="closest"
         )
-        
         st.plotly_chart(fig, use_container_width=True)
-        
-        # Additional timeline view (calendar style)
         st.subheader("📅 Calendar View")
-        
-        # Create a calendar-style visualization
-        calendar_data = []
-        for activity in st.session_state.activities:
-            current_date = activity['start_date']
-            while current_date <= activity['end_date']:
-                calendar_data.append({
-                    'date': current_date,
-                    'activity': activity['name'],
-                    'category': activity['category'],
-                    'priority': activity['priority']
-                })
-                current_date += timedelta(days=1)
-        
-        if calendar_data:
-            cal_df = pd.DataFrame(calendar_data)
-            
-            # Create heatmap-style calendar
-            fig_cal = px.density_heatmap(
-                cal_df, 
-                x='date', 
-                y='activity',
-                title="Activity Calendar Heatmap",
-                color_continuous_scale='Blues'
-            )
-            st.plotly_chart(fig_cal, use_container_width=True)
-    
+        cal = []
+        for a in st.session_state.activities:
+            d = a["start_date"]
+            while d <= a["end_date"]:
+                cal.append({"date":d, "activity":a["name"]})
+                d += timedelta(days=1)
+        if cal:
+            cdf = pd.DataFrame(cal)
+            fig2 = px.density_heatmap(cdf, x="date", y="activity", color_continuous_scale="Blues")
+            st.plotly_chart(fig2, use_container_width=True)
     else:
-        st.info("📝 No activities added yet. Use the sidebar to add your first activity!")
+        st.info("📝 Use the sidebar to add your first activity")
 
-with col2:
+with right:
     st.header("📋 Activity List")
-    
     if st.session_state.activities:
-        # Sort activities by start date (earliest first) for display
-        sorted_activities = sorted(st.session_state.activities, key=lambda x: x['start_date'])
-        
-        # Display current activities (sorted by start date)
-        for i, activity in enumerate(sorted_activities):
-            with st.expander(f"{activity['name']} ({activity['category']})"):
-                # Check if this activity is being edited
-                edit_key = f"edit_{activity['id']}"
-                is_editing = st.session_state.get(edit_key, False)
-                
-                if not is_editing:
-                    # Display mode with category color indicator
-                    category_color = get_color_for_activity(activity['category'], st.session_state.categories)
-                    st.markdown(f"**Category:** <span style='color: {category_color}'>●</span> {activity['category']}", unsafe_allow_html=True)
-                    st.write(f"**Start:** {activity['start_date']}")
-                    st.write(f"**End:** {activity['end_date']}")
-                    st.write(f"**Priority:** {activity['priority']}")
-                    if activity['description']:
-                        st.write(f"**Description:** {activity['description']}")
-                    
-                    # Edit and Delete buttons
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button(f"✏️ Edit", key=f"edit_btn_{activity['id']}"):
-                            st.session_state[edit_key] = True
+        acts = sorted(st.session_state.activities, key=lambda x:x["start_date"])
+        for a in acts:
+            exp = st.expander(f"{a['name']} ({a['category']})")
+            with exp:
+                ek = f"edit_{a['id']}"
+                if not st.session_state.get(ek, False):
+                    col = get_color_for_activity(a["category"], st.session_state.categories)
+                    st.markdown(f"**Category:** <span style='color:{col}'>●</span> {a['category']}", unsafe_allow_html=True)
+                    st.write(f"**Start:** {a['start_date']}")
+                    st.write(f"**End:** {a['end_date']}")
+                    st.write(f"**Priority:** {a['priority']}")
+                    if a["description"]:
+                        st.write(f"**Desc:** {a['description']}")
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        if st.button("✏️ Edit", key=f"e_{a['id']}"):
+                            st.session_state[ek] = True
                             st.rerun()
-                    with col2:
-                        if st.button(f"🗑️ Delete", key=f"delete_{activity['id']}"):
-                            st.session_state.activities = [
-                                act for act in st.session_state.activities 
-                                if act['id'] != activity['id']
-                            ]
-                            # Save after deletion
-                            if save_activities(st.session_state.activities):
-                                st.success("Activity deleted and saved!")
-                            else:
-                                st.error("Activity deleted but failed to save")
+                    with b2:
+                        if st.button("🗑️ Delete", key=f"d_{a['id']}"):
+                            st.session_state.activities = [x for x in st.session_state.activities if x["id"]!=a["id"]]
+                            save_activities(st.session_state.activities)
                             st.rerun()
-                
                 else:
-                    # Edit mode
-                    st.subheader("✏️ Edit Activity")
-                    
-                    with st.form(f"edit_form_{activity['id']}"):
-                        edit_name = st.text_input("Activity Name", value=activity['name'])
-                        
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            edit_start = st.date_input("Start Date", value=activity['start_date'])
-                        with col2:
-                            edit_end = st.date_input("End Date", value=activity['end_date'])
-                        
-                        edit_category = st.selectbox(
-                            "Category",
-                            list(st.session_state.categories.keys()),
-                            index=list(st.session_state.categories.keys()).index(activity['category']) if activity['category'] in st.session_state.categories else 0
-                        )
-                        
-                        edit_priority = st.selectbox(
-                            "Priority",
-                            ["High", "Medium", "Low"],
-                            index=["High", "Medium", "Low"].index(activity['priority'])
-                        )
-                        
-                        edit_description = st.text_area("Description", value=activity.get('description', ''))
-                        
-                        # Form buttons
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            save_changes = st.form_submit_button("💾 Save Changes", use_container_width=True)
-                        with col2:
-                            cancel_edit = st.form_submit_button("❌ Cancel", use_container_width=True)
-                        
-                        if save_changes:
-                            if edit_name and edit_start <= edit_end:
-                                # Update the activity
-                                for j, act in enumerate(st.session_state.activities):
-                                    if act['id'] == activity['id']:
-                                        st.session_state.activities[j].update({
-                                            'name': edit_name,
-                                            'start_date': edit_start,
-                                            'end_date': edit_end,
-                                            'category': edit_category,
-                                            'priority': edit_priority,
-                                            'description': edit_description
-                                        })
-                                        break
-                                
-                                # Save to file
-                                if save_activities(st.session_state.activities):
-                                    st.success("✅ Activity updated and saved!")
+                    with st.form(f"form_{a['id']}"):
+                        name2 = st.text_input("Name", value=a["name"])
+                        c1f,c2f = st.columns(2)
+                        with c1f:
+                            sd2 = st.date_input("Start", a["start_date"])
+                        with c2f:
+                            ed2 = st.date_input("End", a["end_date"])
+                        cat2 = st.selectbox("Category", list(st.session_state.categories.keys()),
+                                            index=list(st.session_state.categories).index(a["category"]))
+                        pr2  = st.selectbox("Priority", ["High","Medium","Low"],
+                                            index=["High","Medium","Low"].index(a["priority"]))
+                        desc2 = st.text_area("Desc", value=a["description"])
+                        s1,s2 = st.columns(2)
+                        with s1:
+                            if st.form_submit_button("💾 Save"):
+                                if name2 and sd2<=ed2:
+                                    for idx,x in enumerate(st.session_state.activities):
+                                        if x["id"]==a["id"]:
+                                            st.session_state.activities[idx].update({
+                                                "name":name2,
+                                                "start_date":sd2,
+                                                "end_date":ed2,
+                                                "category":cat2,
+                                                "priority":pr2,
+                                                "description":desc2
+                                            })
+                                            break
+                                    save_activities(st.session_state.activities)
+                                    st.session_state[ek] = False
+                                    st.rerun()
                                 else:
-                                    st.error("❌ Activity updated but failed to save")
-                                
-                                # Exit edit mode
-                                st.session_state[edit_key] = False
+                                    st.error("Invalid data")
+                        with s2:
+                            if st.form_submit_button("❌ Cancel"):
+                                st.session_state[ek] = False
                                 st.rerun()
-                            else:
-                                st.error("❌ Please enter a valid activity name and ensure start date is before end date.")
-                        
-                        if cancel_edit:
-                            st.session_state[edit_key] = False
-                            st.rerun()
-        
-        # Summary statistics
+        # Summary & CSV Export
         st.subheader("📈 Summary")
-        total_activities = len(st.session_state.activities)
-        categories = [act['category'] for act in st.session_state.activities]
-        priorities = [act['priority'] for act in st.session_state.activities]
-        
-        st.metric("Total Activities", total_activities)
-        
-        if categories:
-            category_counts = pd.Series(categories).value_counts()
-            st.write("**By Category:**")
-            for cat, count in category_counts.items():
-                st.write(f"• {cat}: {count}")
-        
-        if priorities:
-            priority_counts = pd.Series(priorities).value_counts()
-            st.write("**By Priority:**")
-            for pri, count in priority_counts.items():
-                st.write(f"• {pri}: {count}")
-        
-        # Export functionality
+        tot = len(st.session_state.activities)
+        st.metric("Total Activities", tot)
+        cats = pd.Series([x["category"] for x in st.session_state.activities]).value_counts()
+        st.write("**By Category:**")
+        for k,v in cats.items():
+            st.write(f"• {k}: {v}")
+        pris = pd.Series([x["priority"] for x in st.session_state.activities]).value_counts()
+        st.write("**By Priority:**")
+        for k,v in pris.items():
+            st.write(f"• {k}: {v}")
+
         st.subheader("💾 Export Data")
         if st.button("📥 Download as CSV"):
             df = pd.DataFrame(st.session_state.activities)
             csv = df.to_csv(index=False)
-            st.download_button(
-                label="Download CSV",
-                data=csv,
-                file_name="activities_timeline.csv",
-                mime="text/csv"
-            )
-        
-        # Data management
-        st.subheader("🔧 Data Management")
-        
-        # Import from CSV
-        uploaded_file = st.file_uploader("📤 Import activities from CSV", type=['csv'])
-        if uploaded_file is not None:
-            try:
-                import_df = pd.read_csv(uploaded_file)
-                # Convert date columns
-                import_df['start_date'] = pd.to_datetime(import_df['start_date']).dt.date
-                import_df['end_date'] = pd.to_datetime(import_df['end_date']).dt.date
-                import_df['created_at'] = pd.to_datetime(import_df.get('created_at', datetime.now()))
-                
-                # Add IDs if not present
-                if 'id' not in import_df.columns:
-                    import_df['id'] = [str(uuid.uuid4()) for _ in range(len(import_df))]
-                
-                # Convert to list of dictionaries
-                imported_activities = import_df.to_dict('records')
-                
-                if st.button("Confirm Import"):
-                    st.session_state.activities.extend(imported_activities)
-                    if save_activities(st.session_state.activities):
-                        st.success(f"Successfully imported {len(imported_activities)} activities!")
-                    else:
-                        st.error("Import successful but failed to save")
-                    st.rerun()
-                    
-            except Exception as e:
-                st.error(f"Error importing CSV: {e}")
-        
-        # Clear all activities
-        if st.button("🗑️ Clear All Activities", type="secondary"):
-            st.session_state.activities = []
-            save_activities(st.session_state.activities)
-            st.rerun()
-    
+            st.download_button("Download CSV", data=csv, file_name="activities.csv", mime="text/csv")
     else:
         st.info("No activities to display")
+
+    # ─────── Data Management (always visible) ─────────
+    st.subheader("🔧 Data Management")
+
+    # Export both JSONs as a ZIP
+    zip_data = generate_export_zip(st.session_state.activities, st.session_state.categories)
+    st.download_button(
+        "📥 Download JSON (Activities + Categories)",
+        data=zip_data,
+        file_name="amrit_export.zip",
+        mime="application/zip"
+    )
+
+    # Import activities from CSV
+    up_csv = st.file_uploader("📤 Import activities from CSV", type=["csv"], key="impcsv")
+    if up_csv:
+        try:
+            df_imp = pd.read_csv(up_csv)
+            df_imp["start_date"] = pd.to_datetime(df_imp["start_date"]).dt.date
+            df_imp["end_date"]   = pd.to_datetime(df_imp["end_date"]).dt.date
+            if "created_at" in df_imp.columns:
+                df_imp["created_at"] = pd.to_datetime(df_imp["created_at"])
+            else:
+                df_imp["created_at"] = datetime.now()
+            if st.button("Confirm Import CSV", key="imp_csv_btn"):
+                if "id" not in df_imp.columns:
+                    df_imp["id"] = [str(uuid.uuid4()) for _ in range(len(df_imp))]
+                recs = df_imp.to_dict("records")
+                st.session_state.activities.extend(recs)
+                save_activities(st.session_state.activities)
+                st.success(f"Imported {len(recs)} activities from CSV")
+                st.rerun()
+        except Exception as e:
+            st.error(f"Error importing CSV: {e}")
+
+    # Import activities from JSON
+    up_act_j = st.file_uploader("📤 Import activities from JSON", type=["json"], key="impjson_act")
+    if up_act_j:
+        try:
+            text = up_act_j.getvalue().decode("utf-8")
+            arr  = json.loads(text)
+            if not isinstance(arr, list):
+                st.error("Activities JSON must be an array")
+            else:
+                if st.button("Confirm Import Activities JSON", key="imp_json_act_btn"):
+                    to_add = []
+                    for r in arr:
+                        parsed = {
+                            "id": r.get("id", str(uuid.uuid4())),
+                            "name": r.get("name",""),
+                            "start_date": datetime.strptime(r["start_date"],"%Y-%m-%d").date(),
+                            "end_date":   datetime.strptime(r["end_date"],  "%Y-%m-%d").date(),
+                            "category":   r.get("category",""),
+                            "priority":   r.get("priority",""),
+                            "description":r.get("description",""),
+                            "created_at": datetime.strptime(r.get("created_at"),"%Y-%m-%d %H:%M:%S") if r.get("created_at") else datetime.now()
+                        }
+                        to_add.append(parsed)
+                    st.session_state.activities.extend(to_add)
+                    save_activities(st.session_state.activities)
+                    st.success(f"Imported {len(to_add)} activities from JSON")
+                    st.rerun()
+        except Exception as e:
+            st.error(f"Error parsing activities JSON: {e}")
+
+    # Import categories from JSON
+    up_cat_j = st.file_uploader("📤 Import categories from JSON", type=["json"], key="impjson_cat")
+    if up_cat_j:
+        try:
+            txt = up_cat_j.getvalue().decode("utf-8")
+            cd  = json.loads(txt)
+            if not isinstance(cd, dict):
+                st.error("Categories JSON must be an object")
+            else:
+                if st.button("Confirm Import Categories JSON", key="imp_json_cat_btn"):
+                    st.session_state.categories = cd
+                    save_categories(cd)
+                    st.success("Imported categories from JSON")
+                    st.rerun()
+        except Exception as e:
+            st.error(f"Error parsing categories JSON: {e}")
+
+    # Clear all activities
+    if st.button("🗑️ Clear All Activities", type="secondary", key="clear_all_btn"):
+        st.session_state.activities = []
+        save_activities(st.session_state.activities)
+        st.rerun()
 
 # Footer
 st.markdown("---")
