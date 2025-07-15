@@ -135,7 +135,7 @@ st.markdown("Use this app to manage your timeline. All data is read/written to a
 
 c1, c2 = st.columns([3,1])
 with c1:
-    st.success("✅ Connected to Google Sheet")
+    st.success("✅ Connected to database")
 with c2:
     if st.button("🔄 Reload Data"):
         st.session_state.activities = load_activities()
@@ -266,107 +266,107 @@ with left:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader("📅 Calendar View")
-        cal = []
-        for a in acts:
-            d = a["start_date"]
-            while d <= a["end_date"]:
-                cal.append({"date": d, "activity": a["name"]})
-                d += timedelta(days=1)
-        if cal:
-            cdf = pd.DataFrame(cal)
-            fig2 = px.density_heatmap(cdf, x="date", y="activity", color_continuous_scale="Blues")
-            st.plotly_chart(fig2, use_container_width=True)
+        # st.subheader("📅 Calendar View")
+        # cal = []
+        # for a in acts:
+        #     d = a["start_date"]
+        #     while d <= a["end_date"]:
+        #         cal.append({"date": d, "activity": a["name"]})
+        #         d += timedelta(days=1)
+        # if cal:
+        #     cdf = pd.DataFrame(cal)
+        #     fig2 = px.density_heatmap(cdf, x="date", y="activity", color_continuous_scale="Blues")
+        #     st.plotly_chart(fig2, use_container_width=True)
     else:
         st.info("📝 Use the sidebar to add your first activity")
 
 with right:
-    st.header("📋 Activity List")
-    if st.session_state.activities:
-        acts = sorted(st.session_state.activities, key=lambda x: x["start_date"])
-        for a in acts:
-            exp = st.expander(f"{a['name']} ({a['category']})")
-            with exp:
-                edit_flag = f"edit_{a['id']}"
-                if not st.session_state.get(edit_flag, False):
-                    col = get_color_for_activity(a["category"], st.session_state.categories)
-                    st.markdown(f"**Category:** <span style='color:{col}'>●</span> {a['category']}", unsafe_allow_html=True)
-                    st.write(f"**Start:** {a['start_date']}")
-                    st.write(f"**End:** {a['end_date']}")
-                    st.write(f"**Priority:** {a['priority']}")
-                    if a["description"]:
-                        st.write(f"**Desc:** {a['description']}")
-                    b1, b2 = st.columns(2)
-                    with b1:
-                        if st.button("✏️ Edit", key=f"e_{a['id']}"):
-                            st.session_state[edit_flag] = True
-                            st.rerun()
-                    with b2:
-                        if st.button("🗑️ Delete", key=f"d_{a['id']}"):
-                            st.session_state.activities = [
-                                x for x in st.session_state.activities if x["id"] != a["id"]
-                            ]
-                            save_activities(st.session_state.activities)
-                            st.rerun()
-                else:
-                    with st.form(f"form_{a['id']}"):
-                        name2 = st.text_input("Name", value=a["name"])
-                        c1f, c2f = st.columns(2)
-                        with c1f:
-                            sd2 = st.date_input("Start", a["start_date"])
-                        with c2f:
-                            ed2 = st.date_input("End", a["end_date"])
-                        cat2 = st.selectbox("Category", list(st.session_state.categories.keys()), index=list(st.session_state.categories).index(a["category"]))
-                        pr2 = st.selectbox("Priority", ["High","Medium","Low"], index=["High","Medium","Low"].index(a["priority"]))
-                        desc2 = st.text_area("Desc", value=a["description"])
-                        s1, s2 = st.columns(2)
-                        with s1:
-                            if st.form_submit_button("💾 Save"):
-                                if not name2:
-                                    st.error("Enter a name")
-                                elif sd2 > ed2:
-                                    st.error("Start ≤ End")
-                                else:
-                                    # update
-                                    for idx,x in enumerate(st.session_state.activities):
-                                        if x["id"] == a["id"]:
-                                            st.session_state.activities[idx].update({
-                                                "name": name2,
-                                                "start_date": sd2,
-                                                "end_date": ed2,
-                                                "category": cat2,
-                                                "priority": pr2,
-                                                "description": desc2
-                                            })
-                                            break
-                                    save_activities(st.session_state.activities)
+    if st.session_state.authenticated:
+        st.header("📋 Activity List")
+        if st.session_state.activities:
+            acts = sorted(st.session_state.activities, key=lambda x: x["start_date"])
+            for a in acts:
+                exp = st.expander(f"{a['name']} ({a['category']})")
+                with exp:
+                    edit_flag = f"edit_{a['id']}"
+                    if not st.session_state.get(edit_flag, False):
+                        col = get_color_for_activity(a["category"], st.session_state.categories)
+                        st.markdown(f"**Category:** <span style='color:{col}'>●</span> {a['category']}", unsafe_allow_html=True)
+                        st.write(f"**Start:** {a['start_date']}")
+                        st.write(f"**End:** {a['end_date']}")
+                        st.write(f"**Priority:** {a['priority']}")
+                        if a["description"]:
+                            st.write(f"**Desc:** {a['description']}")
+                        b1, b2 = st.columns(2)
+                        with b1:
+                            if st.button("✏️ Edit", key=f"e_{a['id']}"):
+                                st.session_state[edit_flag] = True
+                                st.rerun()
+                        with b2:
+                            if st.button("🗑️ Delete", key=f"d_{a['id']}"):
+                                st.session_state.activities = [
+                                    x for x in st.session_state.activities if x["id"] != a["id"]
+                                ]
+                                save_activities(st.session_state.activities)
+                                st.rerun()
+                    else:
+                        with st.form(f"form_{a['id']}"):
+                            name2 = st.text_input("Name", value=a["name"])
+                            c1f, c2f = st.columns(2)
+                            with c1f:
+                                sd2 = st.date_input("Start", a["start_date"])
+                            with c2f:
+                                ed2 = st.date_input("End", a["end_date"])
+                            cat2 = st.selectbox("Category", list(st.session_state.categories.keys()), index=list(st.session_state.categories).index(a["category"]))
+                            pr2 = st.selectbox("Priority", ["High","Medium","Low"], index=["High","Medium","Low"].index(a["priority"]))
+                            desc2 = st.text_area("Desc", value=a["description"])
+                            s1, s2 = st.columns(2)
+                            with s1:
+                                if st.form_submit_button("💾 Save"):
+                                    if not name2:
+                                        st.error("Enter a name")
+                                    elif sd2 > ed2:
+                                        st.error("Start ≤ End")
+                                    else:
+                                        # update
+                                        for idx,x in enumerate(st.session_state.activities):
+                                            if x["id"] == a["id"]:
+                                                st.session_state.activities[idx].update({
+                                                    "name": name2,
+                                                    "start_date": sd2,
+                                                    "end_date": ed2,
+                                                    "category": cat2,
+                                                    "priority": pr2,
+                                                    "description": desc2
+                                                })
+                                                break
+                                        save_activities(st.session_state.activities)
+                                        st.session_state[edit_flag] = False
+                                        st.rerun()
+                            with s2:
+                                if st.form_submit_button("❌ Cancel"):
                                     st.session_state[edit_flag] = False
                                     st.rerun()
-                        with s2:
-                            if st.form_submit_button("❌ Cancel"):
-                                st.session_state[edit_flag] = False
-                                st.rerun()
 
-        # Summary & CSV Export
-        st.subheader("📈 Summary")
-        tot = len(st.session_state.activities)
-        st.metric("Total Activities", tot)
-        cats = pd.Series([x["category"] for x in st.session_state.activities]).value_counts()
-        st.write("**By Category:**")
-        for k,v in cats.items():
-            st.write(f"• {k}: {v}")
-        pris = pd.Series([x["priority"] for x in st.session_state.activities]).value_counts()
-        st.write("**By Priority:**")
-        for k,v in pris.items():
-            st.write(f"• {k}: {v}")
+            # Summary & CSV Export
+            st.subheader("📈 Summary")
+            tot = len(st.session_state.activities)
+            st.metric("Total Activities", tot)
+            cats = pd.Series([x["category"] for x in st.session_state.activities]).value_counts()
+            st.write("**By Category:**")
+            for k,v in cats.items():
+                st.write(f"• {k}: {v}")
+            pris = pd.Series([x["priority"] for x in st.session_state.activities]).value_counts()
+            st.write("**By Priority:**")
+            for k,v in pris.items():
+                st.write(f"• {k}: {v}")
 
-        st.subheader("💾 Export as CSV")
-        df = pd.DataFrame(st.session_state.activities)
-        csv = df.to_csv(index=False)
-        st.download_button("Download Activities CSV", data=csv, file_name="activities.csv", mime="text/csv")
+            st.subheader("💾 Export as CSV")
+            df = pd.DataFrame(st.session_state.activities)
+            csv = df.to_csv(index=False)
+            st.download_button("Download Activities CSV", data=csv, file_name="activities.csv", mime="text/csv")
 
-        # ────────────── DATA MANAGEMENT ──────────────
-        if st.session_state.authenticated:
+            # ────────────── DATA MANAGEMENT ──────────────
             st.subheader("🔧 Data Management")
             # Download entire Google Sheet as Excel
             if st.button("📥 Download Google-Sheet as Excel"):
@@ -443,8 +443,11 @@ with right:
                 st.success("All activities cleared")
                 st.rerun()
         else:
-            st.info("🔒 Please login to access Data Management")
+            st.info("📝 Use the sidebar to add your first activity")
+    else:
+        st.header("📋 Activity List")
+        st.info("🔒 Please login to view activities")
 
 # ────────────── FOOTER ──────────────
 st.markdown("---")
-st.markdown("*Built by Amrit | Data lives in Google Sheets*")
+st.markdown("*Built by Amrit*")
